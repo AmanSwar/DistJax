@@ -3,6 +3,9 @@ import flax.linen as nn
 
 from ml_collections import ConfigDict 
 from typing import Callable
+import functools
+
+from DistJax.parallelism.tensor_parallel import TPDense
 
 
 class MLPBlock(nn.Module):
@@ -143,3 +146,6 @@ class TPMLPLayers(nn.Module):
             },  # We do not need to partition the parameters over the layer axis.
         )(module, x, ())
         return x
+    
+
+

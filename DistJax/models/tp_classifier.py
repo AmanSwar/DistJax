@@ -7,7 +7,7 @@ import functools
 from typing import Callable
 
 from DistJax.parallelism.tensor_parallel import TPDense
-from DistJax.models.mlp import MLPBlockInput , MLPBlockOutput
+from DistJax.models.mlp import MLPBlockInput , MLPBlockOutput , TPMLPLayers , TPMLPBlock
 
 
 
