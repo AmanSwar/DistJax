@@ -5,6 +5,8 @@ from functools import partial
 from typing import Callable , Tuple
 from ml_collections import ConfigDict
 
+from DistJax.core.attention import dot_product_attention
+from DistJax.parallelism.tensor_parallel_async import TPAsyncDense , TPNorm
 
 class QKVDense(nn.Module):
     config: ConfigDict
@@ -69,6 +71,50 @@ class AttnOut(nn.Module):
             kernel_init=self.kernel_init,
             use_bias=self.use_bias,
             dtype=self.config.dtype,
+            name="out",
+        )(x)
+        return x
+
+
+class TPMultiHeadAttn(nn.Module):
+    config: ConfigDict
+    train: bool
+    mask: jax.Array | None = None
+
+    @nn.compact
+    def __call__(self, x: jax.Array) -> jax.Array:
+
+        tp_size = jax.lax.psum(1, self.config.model_axis_name)
+        input_features = x.shape[-1]
+        head_dim = self.config.head_dim
+        num_heads = self.config.num_heads
+
+        x = TPNorm(config=self.config, name="pre_norm")(x)
+
+        q, k, v = TPAsyncDense(
+            dense_fn=partial(
+                QKVDense,
+                config=self.config,
+                num_heads=num_heads // tp_size,
+                head_dim=head_dim,
+            ),
+            model_axis_name=self.config.model_axis_name,
+            tp_mode="gather",
+            kernel_init_adjustment=tp_size**-0.5,
+            name="qkv",
+        )(x)
+
+        x = dot_product_attention(q, k, v, self.mask)
+
+        x = TPAsyncDense(
+            dense_fn=partial(
+                AttnOut,
+                config=self.config,
+                features=input_features,
+            ),
+            model_axis_name=self.config.model_axis_name,
+            tp_mode="scatter",
+            kernel_init_adjustment=tp_size**-0.5,
             name="out",
         )(x)
         return x
