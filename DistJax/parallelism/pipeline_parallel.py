@@ -1,8 +1,97 @@
+import jax
+import jax.numpy as jnp
+from jax.tree_util import tree_map
 import flax.linen as nn
 from flax.core.frozen_dict import FrozenDict
 
 from typing import Callable, Any
 import functools
+
+from DistJax.core.training import PyTree , Parameter
+
+
+def stack_params(
+    params: PyTree,
+    axis_name: str,
+    mask_except: jax.Array | int | None,
+    axis: int = 0,
+) -> PyTree:
+    """
+    Stakcs sharded params along a givesn axis
+
+    Args:
+        params (PyTree): model parameters
+        axis_name (str): name of the axis to stakc along
+        mask_except (jax.Array | int | None): only the mask_except-th shard will be non zero
+        axis (int, optional): index of the axis to stack along
+
+    Returns:
+        PyTree: Parameters 
+    """
+
+    def _stack(x):
+        """
+        Core stack logic - used on each leaf of a PyTree
+        Args:
+            x (jax.Array): input
+
+        """
+
+        if isinstance(x , nn.Partitioned):
+            value , names = x.value , x.names
+
+        else:
+            value , names = x , (None ,) * x.ndim
+
+        if mask_except is not None:
+
+            axis_index = jax.lax.axis_index(axis_name)
+            value = jnp.expand_dims(value , axis)
+
+        value = jnp.expand_dims(value , axis)
+        names = names[:axis] + (axis_name , ) + names[axis + 1 :]
+
+        return nn.Partitioned(value , names=names)
+
+    return tree_map(
+        _stack,
+        params,
+        is_leaf= lambda x : isinstance(x , nn.Partitioned)
+    )
+
+
+def unstack_params(
+        params : PyTree,
+        axis_name : str
+):
+    """
+    Unstack params along a given axis
+
+    Args:
+        params (PyTree) : params
+        axis_name (str): axis along which to unstack
+    """
+    def _unstack(x: Parameter) -> Parameter:
+        if isinstance(x, nn.Partitioned) and axis_name in x.names:
+            value = x.value
+            names = x.names
+            axis_idx = names.index(axis_name)
+            value = value.squeeze(axis_idx)
+            names = names[:axis_idx] + names[axis_idx + 1 :]
+            if all([n is None for n in names]):
+                return value
+            else:
+                return nn.Partitioned(value, names=names)
+        else:
+            return x
+        
+    
+    return tree_map(
+        _unstack,
+        params,
+        is_leaf= lambda x : isinstance(x , nn.Partitioned)
+
+    )
 
 
 class ModelParallelWrapper(nn.Module):
