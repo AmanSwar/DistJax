@@ -120,3 +120,69 @@ def async_scatter_split(xs: Sequence[PyTree], axis_name: str) -> PyTree:
     return jax.tree_util.tree_map(
         lambda y1, y2: jnp.concatenate([y1, y2], axis=-1), y_up, y_down
     )
+
+
+class TPAsyncDense(nn.Module):
+
+    dense_fn: Any
+    model_axis_name: str
+    tp_mode: Literal["scatter", "gather", "none"] = "none"
+    kernel_init: Callable = nn.initializers.lecun_normal()
+    kernel_init_adjustment: float = 1.0
+    dense_name: str = "module"
+    use_bidirectional_gather: bool = True
+    use_bidirectional_scatter: bool = False
+
+    @nn.compact
+    def __call__(self, x: jax.Array) -> jax.Array:
+        tp_size = jax.lax.psum(1, self.model_axis_name)
+        tp_mode = self.tp_mode if tp_size > 1 else "none"
+
+        dense_fn = partial(
+            ModelParallelWrapper,
+            model_axis_name=self.model_axis_name,
+            module_fn=partial(
+                self.dense_fn,
+                kernel_init=scale_init(self.kernel_init, self.kernel_init_adjustment),
+            ),
+            name=self.dense_name,
+        )
+
+        if tp_mode == "none":
+            y = self.dense_fn(kernel_init=self.kernel_init, name="shard_0")(x)
+
+        elif tp_mode == "gather":
+
+            async_op = (
+                async_gather_bidirectional
+                if self.use_bidirectional_gather
+                else async_gather
+            )
+            xs = async_op(x, axis_name=self.model_axis_name)
+            ys = [
+                dense_fn(
+                    module_kwargs={"use_bias": (i == 0)},
+                    name=f"shard_{i}",
+                )(x)
+                for i, x in enumerate(xs)
+            ]
+
+            y = jax.tree_util.tree_map(lambda *args: sum(args), *ys)
+
+        elif tp_mode == "scatter":
+            ys = [
+                dense_fn(
+                    module_kwargs={
+                        "use_bias": (i == 0)
+                    },  # Only need a single per final output feature.
+                    name=f"shard_{i}",
+                )(x)
+                for i in range(tp_size)
+            ]
+            async_op = (
+                async_scatter_split if self.use_bidirectional_scatter else async_scatter
+            )
+            y = async_op(ys, axis_name=self.model_axis_name)
+        else:
+            raise ValueError(f"Unknown Tensor Parallel mode: {tp_mode}")
+        return y
