@@ -11,7 +11,7 @@ from termcolor import colored
 import os
 
 
-Pytree = Any
+PyTree = Any
 Parameter = nn.Partitioned
 Metrics = Dict[str, Tuple[jax.Array, ...]] | None
 
