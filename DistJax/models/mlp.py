@@ -1,7 +1,8 @@
 import jax
 import flax.linen as nn
 
-from ml_collections import ConfigDict
+from ml_collections import ConfigDict 
+from typing import Callable
 
 
 class MLPBlock(nn.Module):
@@ -47,4 +48,25 @@ class MLPLayers(nn.Module):
             length=self.config.num_layers,
         )(block, x, ())
 
+        return x
+
+
+class MLPBlockInput(nn.Module):
+    config: ConfigDict
+    features: int
+    kernel_init: Callable = nn.initializers.lecun_normal()
+    use_bias: bool = True
+    use_norm: bool = True
+
+    @nn.compact
+    def __call__(self, x: jax.Array) -> jax.Array:
+        if self.use_norm:
+            x = nn.RMSNorm(dtype=self.config.dtype, name="pre_norm")(x)
+        x = nn.Dense(
+            features=self.features,
+            kernel_init=self.kernel_init,
+            use_bias=self.use_bias,
+            dtype=self.config.dtype,
+            name="dense",
+        )(x)
         return x
