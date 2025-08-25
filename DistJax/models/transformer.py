@@ -9,8 +9,11 @@ from ml_collections import ConfigDict
 from DistJax.core.attention import dot_product_attention
 from DistJax.parallelism.tensor_parallel_async import TPAsyncDense , TPNorm
 from DistJax.parallelism.pipeline_parallel import ModelParallelWrapper
+from DistJax.parallelism.sharding import shard_module_params
 from DistJax.core.module_utils import prepare_module
+from DistJax.core.utils import split_array_over_mesh
 from DistJax.models.mlp import MLPBlockInput
+
 
 class QKVDense(nn.Module):
     config: ConfigDict
@@ -379,3 +382,40 @@ class TPInputEmbedding(nn.Module):
             module_fn=partial(InputEmbedding, config=self.config),
             name="module",
         )(x)
+
+
+class TPOutputLayer(nn.Module):
+    config: ConfigDict
+
+    @nn.compact
+    def __call__(self, x: jax.Array) -> jax.Array:
+
+        x = jax.lax.all_gather(
+            x, axis_name=self.config.model_axis_name, axis=-1, tiled=True
+        )
+
+        x = split_array_over_mesh(
+            x, axis_name=self.config.model_axis_name, split_axis=1
+        )
+
+        norm_fn = shard_module_params(
+            nn.RMSNorm,
+            axis_name=self.config.model_axis_name,
+            min_weight_size=self.config.fsdp.min_weight_size,
+        )
+
+        dense_fn = shard_module_params(
+            nn.Dense,
+            axis_name=self.config.model_axis_name,
+            min_weight_size=self.config.fsdp.min_weight_size,
+        )
+
+        x = norm_fn(dtype=self.config.dtype, name="out_norm")(x)
+
+        x = dense_fn(
+            features=self.config.num_outputs,
+            dtype=jnp.float32,
+            name="output_layer",
+        )(x)
+
+        return x
