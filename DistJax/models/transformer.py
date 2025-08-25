@@ -7,6 +7,8 @@ from ml_collections import ConfigDict
 
 from DistJax.core.attention import dot_product_attention
 from DistJax.parallelism.tensor_parallel_async import TPAsyncDense , TPNorm
+from DistJax.core.module_utils import prepare_module
+from DistJax.models.mlp import MLPBlockInput
 
 class QKVDense(nn.Module):
     config: ConfigDict
@@ -156,3 +158,37 @@ class TPTransformerBlock(nn.Module):
 
         return x
 
+
+class QKVMLPDense(nn.Module):
+
+    config: ConfigDict
+    num_heads: int
+    head_dim: int
+    mlp_dim: int
+    kernel_init: Callable
+    use_bias: bool = False
+
+    @nn.compact
+    def __call__(
+        self, x: jax.Array
+    ) -> Tuple[jax.Array, Tuple[jax.Array, jax.Array, jax.Array]]:
+
+        h = MLPBlockInput(
+            config=self.config,
+            features=self.mlp_dim,
+            kernel_init=self.kernel_init,
+            use_bias=self.use_bias,
+            use_norm=False,
+            name="mlp",
+        )(x)
+
+        q, k, v = QKVDense(
+            config=self.config,
+            num_heads=self.num_heads,
+            head_dim=self.head_dim,
+            kernel_init=self.kernel_init,
+            use_bias=self.use_bias,
+            name="qkv",
+        )(x)
+
+        return h, (q, k, v)
