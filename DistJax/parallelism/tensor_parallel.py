@@ -2,12 +2,13 @@ import jax
 import jax.numpy as jnp
 import flax.linen as nn
 
-from typing import Callable , Any , Literal , Sequence
+from typing import Callable , Any , Literal , Sequence , Tuple
 from functools import partial
+from ml_collections import ConfigDict
 
 from DistJax.parallelism.pipeline_parallel import ModelParallelWrapper
 from DistJax.core.utils import scale_init
-from DistJax.core.training import PyTree , Parameter , TrainState
+from DistJax.core.training import PyTree , Parameter , TrainState , Batch , Metrics ,accum_grads
 
 class TPDense(nn.Module):
 
@@ -98,3 +99,41 @@ def init_tp(
         rng=rng,
     )
     return state
+
+
+def train_step(
+    state: TrainState,
+    metrics: Metrics | None,
+    batch: Batch,
+    config: ConfigDict,
+    loss_fn: Callable,
+) -> Tuple[TrainState, Metrics]:
+
+    rng, step_rng = jax.random.split(state.rng)
+    grads, step_metrics = accum_grads(
+        state,
+        batch,
+        step_rng,
+        config.optimizer.num_minibatches,
+        loss_fn=partial(loss_fn, config=config),
+    )
+
+    with jax.named_scope("sync_gradients"):
+        grads = sync_grads(grads, (config.data_axis_name, config.model_axis_name))
+    new_state = state.apply_gradients(grads=grads, rng=rng)
+
+    with jax.named_scope("sync_metrics"):
+        step_metrics = jax.tree_util.tree_map(
+            lambda x: jax.lax.psum(
+                x, axis_name=(config.data_axis_name, config.model_axis_name)
+            ),
+            step_metrics,
+        )
+
+    if metrics is None:
+        metrics = step_metrics
+
+    else:
+        metrics = jax.tree_util.tree_map(jnp.add, metrics, step_metrics)
+
+    return new_state, metrics
