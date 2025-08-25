@@ -54,3 +54,21 @@ class QKVDense(nn.Module):
         return q, k, v
 
 
+class AttnOut(nn.Module):
+
+    config: ConfigDict
+    features: int
+    kernel_init: Callable = nn.initializers.lecun_normal()
+    use_bias: bool = True
+
+    @nn.compact
+    def __call__(self, x: jax.Array) -> jax.Array:
+        x = nn.DenseGeneral(
+            features=self.features,
+            axis=(-2, -1),
+            kernel_init=self.kernel_init,
+            use_bias=self.use_bias,
+            dtype=self.config.dtype,
+            name="out",
+        )(x)
+        return x
