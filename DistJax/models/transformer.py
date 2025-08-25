@@ -1,5 +1,6 @@
 import flax.linen as nn
 import jax
+import jax.numpy as jnp
 
 from functools import partial
 from typing import Callable , Tuple
@@ -343,5 +344,25 @@ class PositionalEncoding(nn.Module):
 
         pos_emb = jnp.expand_dims(pos_emb, axis=range(x.ndim - 2))
         x = x + pos_emb
+
+        return x
+
+
+class InputEmbedding(nn.Module):
+    config: ConfigDict
+
+    @nn.compact
+    def __call__(self, x: jax.Array) -> jax.Array:
+        tp_size = jax.lax.psum(1, self.config.model_axis_name)
+
+        x = nn.Embed(
+            num_embeddings=self.config.vocab_size,
+            features=self.config.hidden_size // tp_size,
+            embedding_init=nn.initializers.normal(stddev=1.0),
+            dtype=self.config.dtype,
+            name="token_emb",
+        )(x)
+
+        x = PositionalEncoding(config=self.config, name="pos_enc")(x)
 
         return x
