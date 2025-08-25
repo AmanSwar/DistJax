@@ -7,7 +7,7 @@ from functools import partial
 
 from DistJax.parallelism.pipeline_parallel import ModelParallelWrapper
 from DistJax.core.utils import scale_init
-from DistJax.core.training import PyTree , Parameter
+from DistJax.core.training import PyTree , Parameter , TrainState
 
 class TPDense(nn.Module):
 
@@ -83,3 +83,18 @@ def sync_grads(grads: PyTree, axis_names=Sequence[str]):
     return jax.tree_util.tree_map(
         _sync_grads, grads, is_leaf=lambda x: isinstance(x, nn.Partitioned)
     )
+
+
+def init_tp(
+    rng: jax.random.PRNGKey, x: jax.Array, model: nn.Module, optimizer: Callable
+) -> TrainState:
+    init_rng, rng = jax.random.split(rng)
+    variables = model.init({"params": init_rng}, x, train=False)
+    params = variables.pop("params")
+    state = TrainState.create(
+        apply_fn=model.apply,
+        params=params,
+        tx=optimizer,
+        rng=rng,
+    )
+    return state
