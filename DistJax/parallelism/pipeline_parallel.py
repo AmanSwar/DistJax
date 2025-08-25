@@ -182,6 +182,26 @@ def execute_pipeline(
     return outputs
 
 
+class PipelineModule(nn.Module):
+
+    model_axis_name: str
+    num_microbatches: int
+    module_fn: Callable[..., nn.Module]
+
+    @nn.compact
+    def __call__(self, *args, **kwargs):
+
+        module = self.module_fn()
+
+        return execute_pipeline(
+            module,
+            *args,
+            **kwargs,
+            num_microbatches=self.num_microbatches,
+            model_axis_name=self.model_axis_name,
+        )
+
+
 class ModelParallelWrapper(nn.Module):
 
     model_axis_name: str
