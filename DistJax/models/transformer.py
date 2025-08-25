@@ -8,6 +8,7 @@ from ml_collections import ConfigDict
 
 from DistJax.core.attention import dot_product_attention
 from DistJax.parallelism.tensor_parallel_async import TPAsyncDense , TPNorm
+from DistJax.parallelism.pipeline_parallel import ModelParallelWrapper
 from DistJax.core.module_utils import prepare_module
 from DistJax.models.mlp import MLPBlockInput
 
@@ -366,3 +367,15 @@ class InputEmbedding(nn.Module):
         x = PositionalEncoding(config=self.config, name="pos_enc")(x)
 
         return x
+
+
+class TPInputEmbedding(nn.Module):
+    config: ConfigDict
+
+    @nn.compact
+    def __call__(self, x: jax.Array) -> jax.Array:
+        return ModelParallelWrapper(
+            model_axis_name=self.config.model_axis_name,  # type: ignore
+            module_fn=partial(InputEmbedding, config=self.config),
+            name="module",
+        )(x)
