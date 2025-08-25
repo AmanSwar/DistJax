@@ -7,7 +7,6 @@ import logging
 from DistJax.core.training import PyTree , Parameter
 
 
-
 @jax.named_scope("shard_params")
 def shard_params(
     params: PyTree, axis_name: str, min_weight_size: int = 2**18
@@ -56,4 +55,47 @@ def shard_params(
         is_leaf=lambda x: isinstance(
             x, nn.Partitioned
         ),  # Consider a nn.Partitioned object as a leaf.
+    )
+
+
+def gather_array_with_mean_grads(x: jax.Array, axis: int, axis_name: str):
+    axis_size = jax.lax.psum(1, axis_name)
+
+    # Define a custom gradient for the gather operation.
+    @jax.custom_gradient
+    def f(x):
+        def grad_fn(g):
+            # pmean_scatter
+            return (
+                jax.lax.psum_scatter(g, axis_name, scatter_dimension=axis, tiled=True)
+                / axis_size
+            )
+
+        return jax.lax.all_gather(x, axis_name, axis=axis, tiled=True), grad_fn
+
+    return f(x)
+
+
+@jax.named_scope("gather_params")
+def gather_params(params: PyTree, axis_name: str) -> PyTree:
+
+    def _gather(p: Parameter) -> Parameter:
+        if isinstance(p, nn.Partitioned) and axis_name in p.names:
+            param_shard = p.names
+            shard_axis = param_shard.index(axis_name)
+            value = gather_array_with_mean_grads(
+                p.value, axis=shard_axis, axis_name=axis_name
+            )
+            param_shard = (
+                param_shard[:shard_axis] + (None,) + param_shard[shard_axis + 1 :]
+            )
+            if any([name is not None for name in param_shard]):
+                return nn.Partitioned(value, param_shard)
+            else:
+                return value # type: ignore
+        else:
+            return p
+
+    return jax.tree_util.tree_map(
+        _gather, params, is_leaf=lambda x: isinstance(x, nn.Partitioned)
     )
