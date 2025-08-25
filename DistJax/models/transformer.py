@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 
 from functools import partial
-from typing import Callable , Tuple
+from typing import Callable , Tuple , Any
 from ml_collections import ConfigDict
 
 from DistJax.core.attention import dot_product_attention
@@ -415,6 +415,40 @@ class TPOutputLayer(nn.Module):
         x = dense_fn(
             features=self.config.num_outputs,
             dtype=jnp.float32,
+            name="output_layer",
+        )(x)
+
+        return x
+
+
+class Transformer(nn.Module):
+
+    config: ConfigDict
+    block_fn: Any = TPTransformerBlock
+
+    @nn.compact
+    def __call__(
+        self, x: jax.Array, train: bool, mask: jax.Array | None = None
+    ) -> jax.Array:
+
+        if mask is None and self.config.causal_mask:
+            mask = nn.make_causal_mask(x, dtype=jnp.bool_)
+
+        x = TPInputEmbedding(
+            config=self.config,
+            name="input_embedding",
+        )(x)
+
+        x = TransformerBackbone(
+            config=self.config,
+            train=train,
+            mask=mask,
+            block_fn=self.block_fn,
+            name="backbone",
+        )(x)
+
+        x = TPOutputLayer(
+            config=self.config,
             name="output_layer",
         )(x)
 
