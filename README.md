@@ -89,7 +89,7 @@ python -m DistJax.examples.train_tp
 
 # Run the pipeline-parallel MLP example
 python -m DistJax.examples.train_pp -->
-```
+
 
 ## 🛠️ Usage and Core Concepts
 
