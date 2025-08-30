@@ -6,7 +6,7 @@ import logging
 from typing import Callable
 import functools
 
-from DistJax.core.training import PyTree , Parameter
+from DistJax.core.training import PyTree , Parameter , TrainState
 
 
 @jax.named_scope("shard_params")
@@ -115,4 +115,14 @@ def shard_module_params(
         ),
         mapped_collections="params",
         mutable=True,
+    )
+
+
+def init_fsdp(rng_key, x, model, optimizer_fn) -> TrainState:
+    """Initializes the sharded model state."""
+    init_rng, state_rng = jax.random.split(rng_key)
+    variables = model.init({"params": init_rng}, x, train=False)
+    params = variables.pop("params")
+    return TrainState.create(
+        apply_fn=model.apply, params=params, tx=optimizer_fn, rng=state_rng
     )
