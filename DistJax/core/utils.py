@@ -27,3 +27,12 @@ def split_array_over_mesh(x: jax.Array, axis_name: str, split_axis: int) -> jax.
         axis=split_axis,
     )
     return x
+
+
+def print_metrics(metrics, step: int, title: str):
+    """Prints metrics in a readable format."""
+    loss = metrics["loss"][0] / metrics["loss"][1]
+    accuracy = metrics["accuracy"][0] / metrics["accuracy"][1]
+    print(
+        f"[{title.upper()}] Step {step}: Loss = {loss:.4f}, Accuracy = {accuracy:.4f}"
+    )
