@@ -22,6 +22,25 @@ A model-parallel strategy that stages sequential model layers or blocks across d
 ### Hybrid Approaches
 The components are designed to be composable. For example, you can combine Data Parallelism and Tensor Parallelism: within a group of 8 GPUs, you might use 4-way tensor parallelism to shard a large model, and then replicate this 4-GPU setup twice for 2-way data parallelism. This allows for flexible scaling across both model size and data throughput.
 
+## 🚀 Quick Start
+
+To quickly run the examples, follow these steps:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/your-username/DistJax.git
+cd DistJax
+
+# 2. Install dependencies
+pip3 install -r requirements.txt
+
+# 3. Run the data-parallel example
+python3 -m examples.data_parallelism
+
+# 4. Run the tensor-parallel example
+python3 -m examples.tensor_parallelism
+```
+
 ## 📂 Library Structure
 
 The repository is organized to separate reusable logic from specific model implementations and training scripts. This clean separation of concerns makes the library easy to navigate and extend.
@@ -29,22 +48,52 @@ The repository is organized to separate reusable logic from specific model imple
 ```
 DistJax/
 ├── core/               # Generic training utilities (TrainState, attention ops)
+│   ├── attention.py
+│   ├── module_utils.py
+│   ├── training.py
+│   └── utils.py
 ├── parallelism/        # The core parallelism primitives and modules
 │   ├── data_parallel.py
-│   ├── tensor_parallel.py
-│   └── pipeline_parallel.py
+│   ├── pipeline_parallel.py
+│   ├── sharding.py
+│   ├── tensor_parallel_async.py
+│   └── tensor_parallel.py
 ├── models/             # Example model architectures built with the library
+│   ├── mlp.py
+│   ├── pp_classifier.py
 │   ├── simple_classifier.py
 │   ├── tp_classifier.py
-│   ├── transformer.py
-│   └── pp_classifier.py
+│   └── transformer.py
 ├── configs/            # Configuration files for the models
-├──examples/           # Standalone scripts to run training for each paradigm
-    ├── data_parallelism.py
-    ├── tensor_parallelism.py
+│   ├── default_config.py
+│   └── tp_config.py
+├── examples/           # Standalone scripts to run training for each paradigm
+│   ├── data_parallelism.py
+│   ├── tensor_parallelism.py
+│   └── utils.py
 ├── README.md
 └── requirements.txt
 ```
+
+## Parallelism Strategies
+
+The `DistJax/parallelism` directory contains the core building blocks for various parallelism strategies:
+
+-   **`data_parallel.py`**: Implements data parallelism with synchronized gradients.
+-   **`pipeline_parallel.py`**: Provides tools for pipeline parallelism, including micro-batching and model wrappers.
+-   **`sharding.py`**: Contains utilities for sharding parameters, including Fully Sharded Data Parallelism (FSDP).
+-   **`tensor_parallel.py`**: Implements synchronous tensor parallelism.
+-   **`tensor_parallel_async.py`**: Implements asynchronous tensor parallelism.
+
+## Models
+
+The `DistJax/models` directory contains several example models that demonstrate how to use the parallelism strategies:
+
+-   **`simple_classifier.py`**: A basic classifier for demonstrating data parallelism.
+-   **`tp_classifier.py`**: A classifier that uses tensor parallelism.
+-   **`pp_classifier.py`**: A classifier that uses pipeline parallelism.
+-   **`transformer.py`**: A Transformer model with tensor parallelism.
+-   **`mlp.py`**: Contains various MLP blocks, including tensor-parallel and asynchronous versions.
 
 ## 🚀 Getting Started
 
@@ -62,9 +111,9 @@ cd DistJax
 It's recommended to use a virtual environment to manage dependencies.
 
 ```bash
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 > **Note:** For GPU or TPU support, ensure you have installed the appropriate version of JAX by following the [official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html).
@@ -75,7 +124,7 @@ The scripts in the `examples/` directory are designed to be run directly. They w
 To run the data-parallel training example:
 
 ```bash
-python -m examples.data_parallelism
+python3 -m examples.data_parallelism
 ```
 
 This will run a few training steps and print the final metrics.
@@ -97,26 +146,25 @@ The `DistJax.models` directory demonstrates the design philosophy: model archite
 
 The `DistJax.examples` scripts tie everything together and provide a blueprint for your own training runs. They handle the essential boilerplate for distributed training:
 
-- **Setting up the JAX Mesh**: A `Mesh` defines the logical topology of your devices (e.g., an 8-device array with a 'data' axis and a 'model' axis). This abstraction is crucial for telling JAX how to distribute data and computations.
+-   **Setting up the JAX Mesh**: A `Mesh` defines the logical topology of your devices (e.g., an 8-device array with a 'data' axis and a 'model' axis). This abstraction is crucial for telling JAX how to distribute data and computations.
 
-- **Loading Model Configurations**: Using `ml_collections.ConfigDict` for clean and hierarchical management of hyperparameters.
+-   **Loading Model Configurations**: Using `ml_collections.ConfigDict` for clean and hierarchical management of hyperparameters.
 
-- **Initializing the Model State**: Using `shard_map` to correctly initialize parameters across all devices according to the specified parallelism strategy. This ensures each device gets only its designated shard of the model.
+-   **Initializing the Model State**: Using `shard_map` to correctly initialize parameters across all devices according to the specified parallelism strategy. This ensures each device gets only its designated shard of the model.
 
-- **Defining the Parallel train_step**: The core training function is written once and then parallelized using `shard_map`, with `PartitionSpec` annotations to define how the state, metrics, and data are sharded.
+-   **Defining the Parallel train_step**: The core training function is written once and then parallelized using `shard_map`, with `PartitionSpec` annotations to define how the state, metrics, and data are sharded.
 
-- **Running the Main Training Loop**: The loop executes the JIT-compiled parallel `train_step`, passing sharded data and updating the distributed model state.
+-   **Running the Main Training Loop**: The loop executes the JIT-compiled parallel `train_step`, passing sharded data and updating the distributed model state.
 
 
 ## 🤝 Contributing
 
 Contributions are welcome! If you have ideas for improvements, new features, or find any bugs, please feel free to open an issue or submit a pull request. Potential areas for future work include:
 
-- Implementation of Fully Sharded Data Parallelism (FSDP)
-- More model examples (e.g., Mixture-of-Experts, Vision Transformers)
-- Support for more advanced optimizers tailored for distributed settings (e.g., ZeRO)
-- Enhanced documentation with more in-depth tutorials and conceptual guides
-- Integration with more advanced JAX features as they become available
+-   More model examples (e.g., Mixture-of-Experts, Vision Transformers)
+-   Support for more advanced optimizers tailored for distributed settings (e.g., ZeRO)
+-   Enhanced documentation with more in-depth tutorials and conceptual guides
+-   Integration with more advanced JAX features as they become available
 
 ## 📜 License
 
