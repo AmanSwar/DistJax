@@ -1,6 +1,7 @@
 import jax
 import flax.linen as nn
 from jax import lax
+import numpy as np
 
 import logging
 from typing import Callable
