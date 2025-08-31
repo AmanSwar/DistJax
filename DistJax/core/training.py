@@ -32,7 +32,7 @@ def accum_grads_loop(
     key,
     n_minbatch: int,
     loss_fn: Callable,
-) -> Tuple[Pytree, Metrics]:
+) -> Tuple[PyTree, Metrics]:
 
     bs = batch.inputs.shape[0]
     min_batchSize = bs // n_minbatch
@@ -72,7 +72,7 @@ def accum_grads_scan(
     key,
     n_minbatch: int,
     loss_fn: Callable,
-) -> Tuple[Pytree, Metrics]:
+) -> Tuple[PyTree, Metrics]:
 
     bs = batch.inputs.shape[0]
     min_batchSize = bs // n_minbatch
@@ -80,7 +80,7 @@ def accum_grads_scan(
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
 
-    def _minbatch_step(batch_idx: jax.Array | int) -> Tuple[Pytree, Metrics]:
+    def _minbatch_step(batch_idx: jax.Array | int) -> Tuple[PyTree, Metrics]:
         # take out minibatch using dynamic slicing
         minibatch = jax.tree_util.tree_map(
             lambda x: jax.lax.dynamic_slice_in_dim(
@@ -99,9 +99,9 @@ def accum_grads_scan(
         return step_grad, step_metric
 
     def _scan_step(
-        carry: Tuple[Pytree, Metrics],
+        carry: Tuple[PyTree, Metrics],
         batch_idx: jax.Array | int,
-    ) -> Tuple[Tuple[Pytree, Metrics], None]:
+    ) -> Tuple[Tuple[PyTree, Metrics], None]:
 
         step_grads, step_metrics = _minbatch_step(batch_idx)
         carry = jax.tree_util.tree_map(jnp.add, carry, (step_grads, step_metrics))
@@ -132,7 +132,7 @@ def accum_grads(
     num_minibatches: int,
     loss_fn: Callable,
     use_scan: bool = True,
-) -> Tuple[Pytree, Metrics]:
+) -> Tuple[PyTree, Metrics]:
 
     if use_scan:
 
