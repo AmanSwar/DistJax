@@ -40,10 +40,8 @@ DistJax/
 │   └── pp_classifier.py
 ├── configs/            # Configuration files for the models
 ├──examples/           # Standalone scripts to run training for each paradigm
-    ├── train_dp.py
-    ├── train_tp.py
-    ├── train_transformer_tp.py
-    └── train_pp.py
+    ├── data_parallelism.py
+    ├── tensor_parallelism.py
 ├── README.md
 └── requirements.txt
 ```
@@ -72,23 +70,15 @@ pip install -r requirements.txt
 > **Note:** For GPU or TPU support, ensure you have installed the appropriate version of JAX by following the [official JAX installation guide](https://jax.readthedocs.io/en/latest/installation.html).
 
 ### 3. Run an Example
-Examples to be added soon ...
-<!-- The scripts in the `examples/` directory are designed to be run directly. They will simulate a multi-device environment on your CPU for demonstration purposes.
+The scripts in the `examples/` directory are designed to be run directly. They will simulate a multi-device environment on your CPU for demonstration purposes.
 
 To run the data-parallel training example:
 
 ```bash
-python -m DistJax.examples.train_dp
+python -m examples.data_parallelism
 ```
 
-This will run a few training steps and print the final metrics. You can similarly run other, more advanced examples:
-
-```bash
-# Run the tensor-parallel MLP example
-python -m DistJax.examples.train_tp
-
-# Run the pipeline-parallel MLP example
-python -m DistJax.examples.train_pp -->
+This will run a few training steps and print the final metrics.
 
 
 ## 🛠️ Usage and Core Concepts
