@@ -37,6 +37,7 @@ def get_default_config():
             data=DATA_CONFIG,
             data_axis_name=MODEL_CONFIG.data_axis_name,
             seed=69,
+            num_steps=10,
         )
     )
 
