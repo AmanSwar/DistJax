@@ -4,6 +4,7 @@ import flax.linen as nn
 
 from typing import Sequence , Tuple
 from ml_collections import ConfigDict
+import functools
 
 from DistJax.core.training import PyTree , Parameter , TrainState , Metrics , Batch , accum_grads
 
@@ -37,9 +38,9 @@ def train_step_dp(
 ) -> Tuple[TrainState, Metrics]:
 
     rng, step_rng = jax.random.split(state.rng)
-
+    bound_loss_fn = functools.partial(loss_fn, config=CONFIG)
     grads, step_metrics = accum_grads(
-        state, batch, step_rng, CONFIG.optimizer.num_minibatches, loss_fn=loss_fn
+        state, batch, step_rng, CONFIG.optimizer.num_minibatches, loss_fn=bound_loss_fn
     )
 
     with jax.named_scope("sync_grads"):
