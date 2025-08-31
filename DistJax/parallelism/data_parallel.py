@@ -57,7 +57,7 @@ def train_step_dp(
         )
 
     if metrics is None:
-        metics = step_metrics
+        metrics = step_metrics
 
     else:
         metrics = jax.tree_util.tree_map(jnp.add, metrics, step_metrics)
