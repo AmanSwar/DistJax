@@ -12,10 +12,10 @@ from DistJax.configs.default_config import get_default_config
 from DistJax.parallelism.sharding import shard_module_params , init_fsdp 
 from DistJax.parallelism.data_parallel import train_step_dp
 from DistJax.models.simple_classifier import Classifier
-from DistJax.core.training import Batch
-from DistJax.core.utils import print_metrics
+from DistJax.core.training import Batch , PyTree 
+from DistJax.core.utils import print_metrics , fold_rng_over_axis
 
-from utils import sim_multiCPU_dev
+from examples.utils import sim_multiCPU_dev
 
 sim_multiCPU_dev()
 
@@ -44,6 +44,29 @@ batch = Batch(
     ),
 )
 
+
+def loss_fn(
+    params: PyTree,
+    apply_fn,
+    batch: Batch,
+    rng,
+    config
+):
+    """Calculates loss and metrics for a single batch."""
+    dropout_rng = fold_rng_over_axis(rng, config.data_axis_name)
+    logits = apply_fn(
+        {"params": params}, batch.inputs, train=True, rngs={"dropout": dropout_rng}
+    )
+    loss_vector = optax.softmax_cross_entropy_with_integer_labels(logits, batch.labels)
+    correct_pred = jnp.equal(jnp.argmax(logits, axis=-1), batch.labels)
+    bs = batch.inputs.shape[0]
+    step_metrics = {
+        "loss": (loss_vector.sum(), bs),
+        "accuracy": (correct_pred.sum(), bs),
+    }
+    return loss_vector.mean(), step_metrics
+
+
 init_fsdp_fn = jax.jit(
     shard_map(
         functools.partial(init_fsdp, model=model_fsdp, optimizer_fn=optimizer),
@@ -58,7 +81,7 @@ init_fsdp_fn = jax.jit(
 )
 train_step_fsdp_fn = jax.jit(
     shard_map(
-        functools.partial(train_step_dp, config=CONFIG),
+        functools.partial(train_step_dp, loss_fn=loss_fn,CONFIG=CONFIG),
         mesh,
         in_specs=(P(), P(), P(CONFIG.data_axis_name)),  # we wanna shard batch only
         out_specs=(
@@ -67,7 +90,7 @@ train_step_fsdp_fn = jax.jit(
         ),  # state and metric should be replicated across devices
         check_rep=False,
     ),
-    donate_argnames=("state", "metrics"),
+    donate_argnums=(0,1),
 )
 
 state_fsdp = init_fsdp_fn(model_init_rng, batch.inputs)
@@ -85,7 +108,7 @@ for step in range(CONFIG.num_steps):
         lambda x: jnp.zeros(x.shape, dtype=x.dtype), metrics_shape
     )
     state_fsdp, step_metrics = train_step_fsdp_fn(state_fsdp, step_metrics, batch)
-
+    print(type(step_metrics))
     print_metrics(step_metrics, step + 1, title="FSDP")
 
 print("\n🎉 Training finished successfully! 🎉")
