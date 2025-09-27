@@ -1,5 +1,5 @@
 # DistJax: A Toolkit for Distributed Training in JAX
-
+### ⚠️ THIS LIBRARY IS NOT PRODUCTION READY YET , CONTAIN BUGS AND IS UNDER ACTIVE DEVELOPMENT
 **DistJax** is a mini-library and collection of examples designed to simplify the implementation of common distributed training paradigms in JAX and Flax. While JAX provides powerful low-level primitives like `pmap` and `shard_map` for parallelism, orchestrating them into cohesive, large-scale training strategies can be complex. This repository provides high-level, reusable building blocks for data parallelism, tensor parallelism (including asynchronous variants), and pipeline parallelism, allowing researchers and engineers to scale their models with clarity and confidence.
 
 ## ✨ Core Features
